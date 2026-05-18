@@ -30,7 +30,12 @@ info "$DM encontrado em: $DM_BIN"
 command -v cinnamon-session &>/dev/null || die "$DE não instalado. Execute: sudo bash 00_instalar_tudo.sh"
 
 # --- Verificar sessão .desktop ---
-SESSION_DESKTOP=$(find /usr/share/xsessions/ -iname "cinnamon*.desktop" 2>/dev/null | head -1)
+if [[ -f "/usr/share/xsessions/cinnamon.desktop" ]]; then
+    SESSION_DESKTOP="/usr/share/xsessions/cinnamon.desktop"
+else
+    SESSION_DESKTOP=$(find /usr/share/xsessions/ -iname "cinnamon*.desktop" 2>/dev/null | head -1)
+fi
+
 if [[ -z "$SESSION_DESKTOP" ]]; then
     warn "Sessão 'cinnamon' não encontrada em /usr/share/xsessions/"
     warn "Sessões disponíveis: $(ls /usr/share/xsessions/ 2>/dev/null | tr '\n' ' ')"
@@ -63,23 +68,42 @@ systemctl enable "$DM"
 log "$DM habilitado."
 
 # --- Configurar LightDM ---
-LCONF="/etc/lightdm/lightdm.conf"
-if [[ -f "$LCONF" ]]; then
-    grep -q "^\[Seat" "$LCONF" || printf "\n[Seat:*]\n" >> "$LCONF"
-    if grep -q "^user-session=" "$LCONF"; then
-        sed -i "s/^user-session=.*/user-session=$SESSION_NAME/" "$LCONF"
-    else
-        sed -i "/^\[Seat/a user-session=$SESSION_NAME" "$LCONF"
-    fi
-    log "LightDM: sessão $SESSION_NAME configurada."
-fi
+mkdir -p /etc/lightdm/lightdm.conf.d
+cat <<EOF > /etc/lightdm/lightdm.conf.d/99-force-session.conf
+[Seat:*]
+user-session=$SESSION_NAME
+EOF
+log "LightDM: sessão global forçada para $SESSION_NAME."
 
-# --- .dmrc do usuário ---
+# --- .dmrc do usuário e AccountsService ---
 if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
     info "Configurando sessão '$SESSION_NAME' para $SUDO_USER..."
     printf "[Desktop]\nSession=%s\n" "$SESSION_NAME" > "/home/$SUDO_USER/.dmrc"
     chown "$SUDO_USER:$SUDO_USER" "/home/$SUDO_USER/.dmrc"
     log ".dmrc configurado."
+    
+    # Forçar AccountsService a reconhecer a sessão (LightDM prioriza isso)
+    ACCOUNTS_FILE="/var/lib/AccountsService/users/$SUDO_USER"
+    if [[ -f "$ACCOUNTS_FILE" ]]; then
+        info "Atualizando AccountsService para $SUDO_USER..."
+        if grep -q "^XSession=" "$ACCOUNTS_FILE"; then
+            sed -i "s/^XSession=.*/XSession=$SESSION_NAME/" "$ACCOUNTS_FILE"
+        else
+            echo "XSession=$SESSION_NAME" >> "$ACCOUNTS_FILE"
+        fi
+        if grep -q "^Session=" "$ACCOUNTS_FILE"; then
+            sed -i "s/^Session=.*/Session=$SESSION_NAME/" "$ACCOUNTS_FILE"
+        else
+            echo "Session=$SESSION_NAME" >> "$ACCOUNTS_FILE"
+        fi
+        log "AccountsService atualizado."
+    fi
+fi
+
+# Forçar o x-session-manager padrão do sistema (Debian/Ubuntu fallback)
+if command -v cinnamon-session &>/dev/null; then
+    update-alternatives --install /usr/bin/x-session-manager x-session-manager $(command -v cinnamon-session) 60 2>/dev/null || true
+    update-alternatives --set x-session-manager $(command -v cinnamon-session) 2>/dev/null || true
 fi
 
 # --- Diagnóstico final ---
