@@ -26,18 +26,7 @@ fi
 [[ -n "$DM_BIN" ]] || die "$DM não encontrado. Execute: sudo bash 00_instalar_tudo.sh"
 info "$DM encontrado em: $DM_BIN"
 
-# --- Verificar DE instalado ---
-command -v gnome-shell &>/dev/null || die "$DE não instalado. Execute: sudo bash 00_instalar_tudo.sh"
-
-# --- Verificar sessão .desktop ---
-SESSION_DESKTOP=$(find /usr/share/xsessions/ -iname "gnome*.desktop" 2>/dev/null | head -1)
-if [[ -z "$SESSION_DESKTOP" ]]; then
-    warn "Sessão 'gnome' não encontrada em /usr/share/xsessions/"
-    warn "Sessões disponíveis: $(ls /usr/share/xsessions/ 2>/dev/null | tr '\n' ' ')"
-    die "Pacote do ambiente pode estar incompleto."
-fi
-SESSION_NAME=$(basename "$SESSION_DESKTOP" .desktop)
-info "Sessão detectada: '$SESSION_NAME'"
+# Removida verificação de sessão a pedido do usuário
 
 # --- Parar todos os DMs ---
 info "Parando todos os display managers..."
@@ -70,19 +59,10 @@ sed -i "s/^#WaylandEnable=false/WaylandEnable=false/" "$GCONF" 2>/dev/null || tr
 grep -q "^WaylandEnable" "$GCONF" || sed -i "/^\[daemon\]/a WaylandEnable=false" "$GCONF" 2>/dev/null || true
 log "GDM3: Wayland desabilitado (Xorg padrão)."
 
-# --- .dmrc do usuário ---
-if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
-    info "Configurando sessão '$SESSION_NAME' para $SUDO_USER..."
-    printf "[Desktop]\nSession=%s\n" "$SESSION_NAME" > "/home/$SUDO_USER/.dmrc"
-    chown "$SUDO_USER:$SUDO_USER" "/home/$SUDO_USER/.dmrc"
-    log ".dmrc configurado."
-fi
-
 # --- Diagnóstico final ---
 info "=== Diagnóstico ==="
 echo "  default-display-manager : $(cat /etc/X11/default-display-manager)"
 echo "  $DM habilitado          : $(systemctl is-enabled $DM 2>/dev/null)"
-echo "  Sessão .desktop          : $SESSION_DESKTOP"
 
 log "=============================================="
 log "$DE + $DM configurados com sucesso! Iniciando em 3s..."
