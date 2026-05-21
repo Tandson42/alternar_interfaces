@@ -27,7 +27,18 @@ fi
 
 # Navega para o diretório de instalação e executa o menu
 cd /opt/alternar_interfaces || exit 1
-./menu.sh
+
+# Se detectarmos que estamos numa interface gráfica (GUI), forçamos a execução no TTY
+if [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
+    echo "Ambiente gráfico detectado. Mudando para o modo texto (TTY) para execução segura..."
+    sleep 2
+    # openvt cria o terminal. Adicionamos um sleep para dar tempo da placa de vídeo
+    # completar a transição de tela do GDM para o TTY antes de desenhar o menu.
+    exec openvt -s -w -- bash -c "sleep 1.5; clear; bash menu.sh"
+else
+    # Já estamos no modo texto, só rodar o menu
+    exec bash menu.sh
+fi
 EOF
 
 # Dá permissão de execução para o comando global
