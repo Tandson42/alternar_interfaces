@@ -25,19 +25,34 @@ if [[ "$EUID" -ne 0 ]]; then
     exec sudo "$0" "$@"
 fi
 
-# Navega para o diretório de instalação e executa o menu
+# Navega para o diretório de instalação
 cd /opt/alternar_interfaces || exit 1
+
+# Trata o parâmetro recebido
+SCRIPT="menu.sh"
+if [[ -n "$1" ]]; then
+    case "$1" in
+        gdm)  SCRIPT="01_usar_gnome.sh" ;;
+        kde)  SCRIPT="02_usar_kde.sh" ;;
+        xfce) SCRIPT="03_usar_xfce.sh" ;;
+        *)
+            echo "Parâmetro inválido: $1"
+            echo "Uso opcional: interfaces [gdm|kde|xfce]"
+            exit 1
+            ;;
+    esac
+fi
 
 # Se detectarmos que estamos numa interface gráfica (GUI), forçamos a execução no TTY
 if [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
     echo "Ambiente gráfico detectado. Mudando para o modo texto (TTY) para execução segura..."
     sleep 2
     # openvt cria o terminal. Adicionamos um sleep para dar tempo da placa de vídeo
-    # completar a transição de tela do GDM para o TTY antes de desenhar o menu.
-    exec openvt -s -w -- bash -c "sleep 1.5; clear; bash menu.sh"
+    # completar a transição de tela do GDM para o TTY antes de rodar o script.
+    exec openvt -s -w -- bash -c "sleep 1.5; clear; bash $SCRIPT"
 else
-    # Já estamos no modo texto, só rodar o menu
-    exec bash menu.sh
+    # Já estamos no modo texto, só rodar o script escolhido
+    exec bash "$SCRIPT"
 fi
 EOF
 
