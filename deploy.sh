@@ -43,15 +43,15 @@ if [[ -n "$1" ]]; then
     esac
 fi
 
-# Se detectarmos que estamos numa interface gráfica (GUI), forçamos a execução no TTY
-if [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
+# Se detectarmos que estamos numa interface gráfica (GUI) e rodando de um terminal interativo (TTY), forçamos a execução num VT
+if [[ (-n "$DISPLAY" || -n "$WAYLAND_DISPLAY") && -t 1 ]]; then
     echo "Ambiente gráfico detectado. Mudando para o modo texto (TTY) para execução segura..."
     sleep 2
     # openvt cria o terminal. Adicionamos um sleep para dar tempo da placa de vídeo
     # completar a transição de tela do GDM para o TTY antes de rodar o script.
     exec openvt -s -w -- bash -c "sleep 1.5; clear; bash $SCRIPT"
 else
-    # Já estamos no modo texto, só rodar o script escolhido
+    # Já estamos no modo texto, SSH ou rodando via daemon (Epoptes), só rodar o script
     exec bash "$SCRIPT"
 fi
 EOF
