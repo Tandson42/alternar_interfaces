@@ -99,3 +99,31 @@ systemctl start "$DM" || {
     echo "  /etc/X11/default-display-manager = $(cat /etc/X11/default-display-manager 2>/dev/null)"
     die "$DM não iniciou. Veja diagnóstico acima."
 }
+
+# ==============================================================================
+# DEFINIÇÃO DO WALLPAPER PADRÃO (Executa em background aguardando a sessão)
+# ==============================================================================
+(
+  # Aguarda até que o plasmashell esteja rodando (máx 60s)
+  for i in {1..30}; do
+    if pgrep plasmashell >/dev/null; then
+      sleep 5 # Aguarda inicialização completa do desktop
+
+      # Pega o DISPLAY e WAYLAND_DISPLAY do processo plasmashell
+      export DISPLAY=$(tr '\0' '\n' < /proc/$(pgrep plasmashell | head -n1)/environ 2>/dev/null | grep ^DISPLAY= | cut -d= -f2- || true)
+      export WAYLAND_DISPLAY=$(tr '\0' '\n' < /proc/$(pgrep plasmashell | head -n1)/environ 2>/dev/null | grep ^WAYLAND_DISPLAY= | cut -d= -f2- || true)
+
+      if [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
+        USER_LOGGED=$(ps -o ruser= -p $(pgrep plasmashell | head -n1) | tr -d ' ')
+        if [[ -n "$USER_LOGGED" && "$USER_LOGGED" != "root" ]]; then
+            export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u "$USER_LOGGED")/bus"
+            sudo -u "$USER_LOGGED" DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" DISPLAY="$DISPLAY" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" plasma-apply-wallpaperimage /usr/share/backgrounds/liu_wpp_info.png 2>/dev/null || true
+        else
+            plasma-apply-wallpaperimage /usr/share/backgrounds/liu_wpp_info.png 2>/dev/null || true
+        fi
+      fi
+      break
+    fi
+    sleep 2
+  done
+) &
