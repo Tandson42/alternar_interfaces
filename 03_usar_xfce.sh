@@ -100,3 +100,51 @@ systemctl start "$DM" || {
     echo "  /etc/X11/default-display-manager = $(cat /etc/X11/default-display-manager 2>/dev/null)"
     die "$DM não iniciou. Veja diagnóstico acima."
 }
+
+# ==============================================================================
+# DEFINIÇÃO DO WALLPAPER PADRÃO (Executa em background aguardando a sessão)
+# ==============================================================================
+(
+  # Aguarda até que o xfdesktop esteja rodando (máx 60s)
+  for i in {1..30}; do
+    if pgrep xfdesktop >/dev/null; then
+      sleep 3 # Aguarda inicialização completa do desktop
+
+      # Pega o DISPLAY do processo xfdesktop (head -n1 previne erros se houver >1)
+      export DISPLAY=$(tr '\0' '\n' < /proc/$(pgrep xfdesktop | head -n1)/environ 2>/dev/null | grep ^DISPLAY= | cut -d= -f2- || true)
+
+      if [[ -n "$DISPLAY" ]]; then
+        # Corrige monitorHDMI-1 (wallpaper ainda errado) e monitorVGA-1 (image-style inválido)
+        for monitor in monitorHDMI-1 monitorVGA-1; do
+          for ws in 0 1 2 3; do
+            # Para o xfconf-query funcionar via root no DBUS do usuário logado:
+            USER_LOGGED=$(ps -o ruser= -p $(pgrep xfdesktop | head -n1) | tr -d ' ')
+            if [[ -n "$USER_LOGGED" && "$USER_LOGGED" != "root" ]]; then
+                export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u "$USER_LOGGED")/bus"
+                SUDO_CMD="sudo -u $USER_LOGGED DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS DISPLAY=$DISPLAY"
+            else
+                SUDO_CMD=""
+            fi
+
+            $SUDO_CMD xfconf-query -c xfce4-desktop \
+              -p /backdrop/screen0/${monitor}/workspace${ws}/last-image \
+              -s /usr/share/backgrounds/ltsp_wallpaper.jpg --create --type string 2>/dev/null || true
+
+            # Remove a propriedade corrompida e recria com tipo correto
+            $SUDO_CMD xfconf-query -c xfce4-desktop \
+              -p /backdrop/screen0/${monitor}/workspace${ws}/image-style \
+              --reset 2>/dev/null || true
+
+            $SUDO_CMD xfconf-query -c xfce4-desktop \
+              -p /backdrop/screen0/${monitor}/workspace${ws}/image-style \
+              --create --type int -s 5 2>/dev/null || true
+          done
+        done
+
+        $SUDO_CMD xfdesktop --reload 2>/dev/null || true
+      fi
+      break
+    fi
+    sleep 2
+  done
+) &
